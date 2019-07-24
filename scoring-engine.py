@@ -9,9 +9,45 @@ import shutil
 
 warnings.filterwarnings("ignore")
 
+# Custom variables in the section below:
+# Change these to change the flow of the competition
+
+# this is the hour the scoring engine will start
+# 9 
+START   = 13
+# this is how many minutes the grace period is 
+# this value must be under an hour.
+# 40
+GRACE   = 0
+
+# this is the time the first break starts. 
+# The var with H is the hour, and the other is the minute.
+# 1200
+BREAK1H = 13
+BREAK1M = 30
+
+# this is the time the second break starts.
+# Again, H=hour, M=minute
+# 1530
+BREAK2H = 13
+BREAK2M = 45
+
+# This is how long the breaks will take in minutes
+# 30
+BREAKLENGTH = 1
+
+# this is the hour at which the competition will end. 
+# 19
+END = 14
+
+# How many seconds between checks
+# 37.5
+SECONDS = 10
+
 # Init vars
 CHECKS= 0
 SCORE = 0
+POINTS = 100 / ((((END - START)*60)-((BREAKLENGTH*2)+GRACE)) / (SECONDS/60))
 WEB_HOST = 'http://172.19.55.12'
 TOM_HOST = 'http://172.19.55.13:8080'
 FILE_HOST = '172.19.50.14'
@@ -33,38 +69,41 @@ LOG_FILE = "scoring-log-" + datetime.datetime.now().strftime('%m_%d_%H-%M') + ".
 shutil.copy("scoring-log.sample", LOG_FILE)
 log = open(LOG_FILE, "a")
 
-# Start this script before 0900. It will wait until then to start
+# Start this script before the start time. It will wait until then to start
 # actually running.
 
 print("The scoring engine has started running at", datetime.datetime.now().strftime('%H:%M'))
-while(datetime.datetime.now().hour < 9):
+while(datetime.datetime.now().hour < START):
     time.sleep(.001)
 
 # First it will wait 40 minutes, or the grace period.
 print("The competition has begun... starting the grace period.")
-while(datetime.datetime.now().hour == 9 and datetime.datetime.now().minute< 40):
+while(datetime.datetime.now().hour == START and datetime.datetime.now().minute< GRACE):
     time.sleep(.001)
 
 # Then it will start scoring services. During the 30 minute breaks,
 # it will pause and stop the scoring.
 print("Scoring of services has begun at",datetime.datetime.now().strftime('%H:%M'))
 # Changing this value will change when the competition ends
-while (datetime.datetime.now().hour < 19):
+while (datetime.datetime.now().hour < END):
 
     #
     # Check to see if it's break time (1200-1230 and 1530-1600)
     #
 
-    if ((datetime.datetime.now().hour == 12 and datetime.datetime.now().minute == 0) or (datetime.datetime.now().hour == 15 and datetime.datetime.now().minute == 30)):
+    if ((datetime.datetime.now().hour == BREAK1H and datetime.datetime.now().minute == BREAK1M) or (datetime.datetime.now().hour == BREAK2H and datetime.datetime.now().minute == BREAK2M)):
         subprocess.run("clear")
         print("Break time has begun. Scoring of services has stopped.")
-        time.sleep(1800) #1800 = 30 min
+        time.sleep(BREAKLENGTH*60) # value has to be in seconds
     #
     # Get responses from the servers
     #
     if (CHECKS != 0):
         subprocess.run(["printf", "\\033[15A"])
-    
+   
+    # Start timer
+    starttime = time.time()
+
     # Apache Wordpress
     try: #reaching wordpress
         web = requests.get(url = WEB_HOST)
@@ -124,7 +163,16 @@ while (datetime.datetime.now().hour < 19):
     
     except:
         SERVICES["MAILUP"] = False
+  
+    # New Service Check
+    #try:
+    #    test thing
+    # except: 
+    #     it dont work
     
+    # End timer
+    tottime = time.time() - starttime
+
     #
     # Show results
     #
@@ -138,12 +186,13 @@ while (datetime.datetime.now().hour < 19):
     print(" | DNS         :", SERVICES["DNSUP"], "\t|")
     print(" | File Server :", SERVICES["FILEUP"], "\t|")
     print(" | Mail Server :", SERVICES["MAILUP"], "\t|")
+    #print(" | Service     :", SERVICES["SERVICEUP"], "\t|")
     print(" ------------------------")
     
     #
     # Write results to the log
     #
-    log.write("   " + str(CHECKS) + "\t| " + str(SERVICES["WEBUP"]) + "\t" + str(SERVICES["TOMUP"]) + "\t" + str(SERVICES["DNSUP"]) + "\t" + str(SERVICES["FILEUP"]) + "\t" + str(SERVICES["MAILUP"]) + "\t| " + datetime.datetime.now().strftime('%H:%M') + "\n")
+    log.write("   " + str(CHECKS) + "\t| " + str(SERVICES["WEBUP"]) + "\t" + str(SERVICES["TOMUP"]) + "\t" + str(SERVICES["DNSUP"]) + "\t" + str(SERVICES["FILEUP"]) + "\t" + str(SERVICES["MAILUP"]) + "\t| " + datetime.datetime.now().strftime('%H:%M') + "\t| " + str(SCORE) + "\n")
 
     #
     # Calculate Score
@@ -153,21 +202,22 @@ while (datetime.datetime.now().hour < 19):
         if (up):
             count += 1.0
     # The multiplier here is how many points per service check.
-    # This number should be 20% of the minutes per check
-    SCORE += (count / len(SERVICES))*.125
+    # it's calculated in the vars. For a ten hour competition,
+    # with 37.5 second checks, it should be .125
+    SCORE += (count / len(SERVICES))*POINTS
     
-    print(" | Score       :", round(SCORE,6), "\t|")
+    print(" | Score       :", round(SCORE,2), "\t|")
     print(" ------------------------")
-    print(" | Time        :", "37", "\t|")
+    print(" | Time        :", str(round(SECONDS - tottime,2)), "\t|")
     print(" ------------------------")
     
     # This value decides how long there is between 
     # service checks. Keep in mind each check takes
     # a few seconds on it's own.
     curtime = time.time()
-    while(time.time() < curtime + 37.5 ):
+    while(time.time() < curtime + SECONDS - tottime):
         subprocess.run(["printf", "\\033[2A"])
-        print(" | Time        :", round((curtime+37.51)-time.time(),2), "\t|")
+        print(" | Time        :", round((curtime+(SECONDS+.01-tottime))-time.time(),2), "\t|")
         print(" ------------------------")
     #(37.5 = .625 mins)
 
