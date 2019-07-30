@@ -14,22 +14,22 @@ warnings.filterwarnings("ignore")
 
 # this is the hour the scoring engine will start
 # 9 
-START   = 13
+START   = 9
 # this is how many minutes the grace period is 
 # this value must be under an hour.
 # 40
-GRACE   = 0
+GRACE   = 10
 
 # this is the time the first break starts. 
 # The var with H is the hour, and the other is the minute.
 # 1200
-BREAK1H = 13
-BREAK1M = 30
+BREAK1H = 9
+BREAK1M = 20
 
 # this is the time the second break starts.
 # Again, H=hour, M=minute
 # 1530
-BREAK2H = 13
+BREAK2H = 9
 BREAK2M = 45
 
 # This is how long the breaks will take in minutes
@@ -38,11 +38,11 @@ BREAKLENGTH = 1
 
 # this is the hour at which the competition will end. 
 # 19
-END = 14
+END = 10
 
 # How many seconds between checks
 # 37.5
-SECONDS = 10
+SECONDS = 40
 
 # Init vars
 CHECKS= 0
@@ -52,6 +52,8 @@ WEB_HOST = 'http://172.19.55.12'
 TOM_HOST = 'http://172.19.55.13:8080'
 FILE_HOST = '172.19.50.14'
 MAIL_HOST = 'https://172.19.50.16'
+LIGHTS_RED = 'http://172.19.54.15/light/startshow/2'
+LIGHTS_BLUE = 'http://172.19.54.15/light/startshow/3'
 SERVICES = {
         "WEBUP":False,
         "TOMUP":False,
@@ -60,6 +62,11 @@ SERVICES = {
         "MAILUP":False
         }
 SMTP = smtplib.SMTP('172.19.50.16', 587)
+
+cmd = "sudo mount -t cifs -o username=scoring,password=password //172.19.50.14/Files /home/scoring@compb.muc-ish.de/files"
+subprocess.run(cmd.split())
+
+requests.get(url = LIGHTS_RED)
 
 # Clear the screen
 subprocess.run("clear")
@@ -73,6 +80,9 @@ log = open(LOG_FILE, "a")
 # actually running.
 
 print("The scoring engine has started running at", datetime.datetime.now().strftime('%H:%M'))
+
+requests.get(url = LIGHTS_BLUE)
+
 while(datetime.datetime.now().hour < START):
     time.sleep(.001)
 
@@ -93,8 +103,10 @@ while (datetime.datetime.now().hour < END):
 
     if ((datetime.datetime.now().hour == BREAK1H and datetime.datetime.now().minute == BREAK1M) or (datetime.datetime.now().hour == BREAK2H and datetime.datetime.now().minute == BREAK2M)):
         subprocess.run("clear")
+        requests.get(url=LIGHTS_RED)
         print("Break time has begun. Scoring of services has stopped.")
         time.sleep(BREAKLENGTH*60) # value has to be in seconds
+    requests.get(url = LIGHTS_BLUE)
     #
     # Get responses from the servers
     #
@@ -132,11 +144,13 @@ while (datetime.datetime.now().hour < END):
         SERVICES["DNSUP"] = False
 
     # File Server Check
+    # IMPORTANT NOTE: YOU MUST SET SCORING@COMPB.MUC-ISH.DE's HOME FILE PERMISSIONS TO +777 
+    # SO THAT THIS SCRIPT CAN ACCESS IT! OTHERWISE IT WON'T WORK!!!
     try: #remounting the file share and checking for a file
-        remount = "sudo mount -t cifs -o username=scoring,password=password //172.19.50.14/Files /home/install/files"
-        subprocess.run(["sudo", "umount", "/home/install/files/"])
+        remount = "sudo mount -t cifs -o username=scoring,password=password //172.19.50.14/Files /home/scoring@compb.muc-ish.de/files"
+        subprocess.run(["sudo", "umount", "/home/scoring@compb.muc-ish.de/files/"])
         subprocess.run(remount.split())
-        open('/home/install/files/DONOTDELETE.txt')
+        open('/home/scoring@compb.muc-ish.de/files/DONOTDELETE.txt')
         SERVICES["FILEUP"] = True
     except:
         SERVICES["FILEUP"] = False
@@ -221,5 +235,6 @@ while (datetime.datetime.now().hour < END):
         print(" ------------------------")
     #(37.5 = .625 mins)
 
+requests.get(url = LIGHTS_RED)
 print("\nThe Competition has ended! Congratulations!")
 print("You finished with", round(SCORE,6), "points!")
